@@ -7,22 +7,22 @@
 #include "tablas.h"
 #include "interaccion.h"
 #include "metropolis.h"
-//int ID_random(double *type, int N);
+int ID_random(double *type, int N);
 int ID_half(double *type, int N);
-//int imprimir_ID(double *type, int N);
+int imprimir_ID(double *type, int N);
 
 
 int main()
 {
 //------Datos de la simulación
 	int N = 512; //tiene que ser un cubo!!!!
-	double rho = 0.10, L = cbrt(N / rho), T0 = 4.05;
+	double rho = 0.14, L = cbrt(N / rho), T0 = 4.05;
 	double beta = 1.0 / T0;
 	double dx, dp; //diferenciales p/ Montecarlo
-//	int correlacion = 1 ,pasos = 10 * N * correlacion, pre_termalizacion = 300, termalizacion = 500;
-	int correlacion = 500, pasos = 10 * N * correlacion, pre_termalizacion = 30000000, termalizacion = 80000;
+//	int correlacion = 500, pasos = 1000 * correlacion, pre_termalizacion = 30000000, termalizacion = 50000;20000000
+	int l = 50, correlacion = 1, pasos = l * 10 * N * correlacion, pre_termalizacion = 20000000, termalizacion = 5;
 
-	double Temp = T0, dT = -0.05, Tf = 0.05 + dT;
+	double Temp = T0, dT = -0.025, Tf = 0.05 + dT;
 	int tfinal =(int)((Tf - Temp) / dT);
 	double *x, *p, *type;
 	x = (double*) malloc(3 * N * sizeof(double));
@@ -57,10 +57,9 @@ int main()
 //-------Metrópolis
 	int t, n;
 	double va;
-	double total = (double) (pasos * tfinal + pre_termalizacion);
-	double ax = 0.146624, bx = -0.013726, ap = 1.02777, bp =  0.0117; //parametros del ajuste para calcular los dx y dp
-	dp = sqrt(T0) * ap + bp;
-	dx = sqrt(T0) * ax + bx;
+	double total = (double) (tfinal + pre_termalizacion);
+	dp = 2.0;
+	dx = 0.5;
 //---Termalizacion inicial
 	for (n = 0; n < pre_termalizacion; n++)
 	{
@@ -77,40 +76,62 @@ int main()
 	aceptacion_x = (double*) malloc(tfinal * sizeof(double));
 	aceptacion_p = (double*) malloc(tfinal * sizeof(double));
 	double si_x, si_p;
-
-
+	double *Dx, *Dp;
+	Dx = (double*) malloc(tfinal * sizeof(double));
+	Dp = (double*) malloc(tfinal * sizeof(double));
+	int h;
 	for (t = 0; t < tfinal; t++)
 	{
-		dp = sqrt(Temp) * ap + bp;
-		dx = sqrt(Temp) * ax + bx;
 		for (n = 0; n < termalizacion; n++)
 		{
 			metro_x (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dx, beta, type);
 			metro_p (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dp, beta, type);
 		}
+		for(h = 0; h < l - 1; h++)
+		{
+			si_x = 0.0;
+			si_p = 0.0;
+			for (n = 0; n < pasos / l; n++)
+			{
+				si_x += metro_x (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dx, beta, type);
+				si_p += metro_p (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dp, beta, type);
+				*(Energia + (n + h * pasos / l) / correlacion) = *E;			
+
+			}	
+
+			if(si_x / (double)(pasos / l) <= 0.45)
+			{
+				dx -= dx / 10.0; //le bajo un 10%
+			}
+			if(si_p / (double)(pasos / l) <= 0.45)
+			{
+				dp -= dp / 10.0; //le bajo un 10%
+			}
+		}
 		si_x = 0.0;
 		si_p = 0.0;
-		for (n = 0; n < pasos; n++)
+		for (n = 0; n < pasos / l; n++)
 		{
 			si_x += metro_x (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dx, beta, type);
 			si_p += metro_p (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dp, beta, type);
-			if(n % correlacion == 0)
-			{
-				*(Energia + n / correlacion) = *E;
-			}
-			va = (double) (n + t * pasos + pre_termalizacion) * 100.0 / total;
-			printf("Progreso %.2lf", va);
-			printf("%%\r");
+			*(Energia + (n + pasos * (l - 1) / l) / correlacion) = *E;			
 		}
 		*(Energy + t) = mean (Energia, 0, pasos / correlacion, 1);
-		*(aceptacion_x + t) = si_x / (double) pasos * 100.0;
-		*(aceptacion_p + t) = si_p / (double) pasos * 100.0;
+		*(aceptacion_x + t) = si_x / (double) (pasos / l) * 100.0;
+		*(aceptacion_p + t) = si_p / (double) (pasos / l) * 100.0;
+		*(Dx + t) = dx;
+		*(Dp + t) = dp;
+		
 		Temp += dT;
 		beta = 1.0 / Temp;
+		va = (double) (t + pre_termalizacion) * 100.0 / total;
+		printf("Progreso %.2lf", va);
+		printf("%%\r");
 	}
+	printf("\nGuardo datos\n");
 	FILE * fp;
 	char filename[500];
-	sprintf (filename,"/home/pedro/Desktop/Final_compu/Datos/barrido_rho_%.2lf.txt", rho);
+	sprintf (filename,"/home/pedro/Desktop/Final_compu/Datos/barrido_deltas_rho_%.2lf.txt", rho);
 	fp = fopen(filename, "w");
 
 	for (t = 0; t < tfinal; t++)
@@ -118,7 +139,9 @@ int main()
 		fprintf(fp, "%lf\t", T0);
 		fprintf (fp, "%lf\t",  *(Energy + t));
 		fprintf(fp, "%lf\t",  *(aceptacion_x + t));
-		fprintf(fp, "%lf\n",  *(aceptacion_p + t));
+		fprintf(fp, "%lf\t",  *(aceptacion_p + t));
+		fprintf(fp, "%lf\t",  *(Dx + t));
+		fprintf(fp, "%lf\n",  *(Dp + t));
 		T0 += dT;
 	}
 	fclose(fp);
@@ -133,8 +156,23 @@ int main()
 	free(Energy);
 	free(aceptacion_x);
 	free(aceptacion_p);
+	free(Dx);
+	free(Dp);
 	return 0;
 }
+int ID_random(double *type, int N)
+{
+	double al, bl;
+	int i;
+	for(i = 0; i < N; i++)
+	{
+		al = rand()%2 + 1.0; //tira 2s y 1s
+		bl = rand()%2 * 2.0 - 1.0; //tira -1s y 1s
+		*(type + i) = bl * al;
+	}
+	return 0;
+}
+
 int ID_half(double *type, int N) //1/2 n & p, y 1/2 up & down
 {
 	int i;
@@ -153,19 +191,6 @@ int ID_half(double *type, int N) //1/2 n & p, y 1/2 up & down
 	for(i = 1; i < N; i = i + 4)
 	{
 		*(type + i) = -*(type + i);
-	}
-	return 0;
-}
-/*
-int ID_random(double *type, int N)
-{
-	double al, bl;
-	int i;
-	for(i = 0; i < N; i++)
-	{
-		al = rand()%2 + 1.0; //tira 2s y 1s
-		bl = rand()%2 * 2.0 - 1.0; //tira -1s y 1s
-		*(type + i) = bl * al;
 	}
 	return 0;
 }
@@ -202,7 +227,6 @@ int imprimir_ID(double *type, int N)
 	printf("--------------\n");
 	return 0;
 }
-*/
 #include "general.c"
 #include "inicializar.c"
 #include "tablas.c"
