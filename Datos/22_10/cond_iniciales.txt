@@ -1,0 +1,2 @@
+	int correlacion = 500, pasos = 10 * N * correlacion, pre_termalizacion = 30000000, termalizacion = 80000;
+
