@@ -7,28 +7,27 @@
 #include "tablas.h"
 #include "interaccion.h"
 #include "metropolis.h"
-int ID_random(double *type, int N);
-int ID_half(double *type, int N);
-int imprimir_ID(double *type, int N);
 
-
-int main()
+int main(int argc,char *argv[])
 {
-//------condiciones iniciales------(arreglo cúbico en las posiciones y gaussiana en los momentos=
-	int N = 216; //tiene que ser un cubo!!!!
-	double rho = 0.16, L = cbrt(N / rho), T0 = 4.0;
+//------Datos de la simulación
+	int N = 512; //tiene que ser un cubo y multiplo de 4!!
+	double rho;
+	sscanf(argv[1],"%lf", &rho);
+	printf("rho ---> %.2lf\n", rho);
+	double L = cbrt(N / rho), T0 = 4.0;
 	double beta = 1.0 / T0;
-	int correlacion = 1000, pasos = 100 * correlacion;
-	double *x, *p, *type;
+	double dx, dp; //diferenciales p/ Montecarlo
+	int correlacion = 1 ,pasos = 10 * N * correlacion + 1000000, termalizacion = 0;
+
+	double *x, *p;
 	x = (double*) malloc(3 * N * sizeof(double));
 	p = (double*) malloc(3 * N * sizeof(double));
-	type = (double*) malloc(N * sizeof(double));
+//------condiciones iniciales------(arreglo cúbico en las posiciones y gaussiana en los momentos
 	srand(1.0);
 	set_pos(x, N, L);
 	set_momentos(p, N, T0);
-//--tipo de partículas: 1--->neutrón y 2---->protón con +/- su proyección de spin
-	ID_half(type, N);
-	imprimir_ID(type, N);
+//--tipo de partículas:-->//(0:N/2) n y (N/2:N) p
 //---ctes de los potenciales
 	double p0 = 2.067 * pow(10, -22); // MeV * s / fm
 	double q0 = 6.0; //fm
@@ -46,118 +45,60 @@ int main()
 	E = (double*) malloc(1 * sizeof(double));
 	double *Energia;
 	Energia = (double*) malloc(pasos / correlacion * sizeof(double));
-	*E = hamiltoneano (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, type);
-	printf("\n Energía inicial %lf\n", *E);
+	*E = hamiltoneano (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0);
+	printf("\n Energía inicial %lf\n", *E / (double) N);
 //-------Metrópolis
-	double aceptacion_x = 0.0, aceptacion_p = 0.0, dx = 0.2, dp = 1.2;
-	int t;
+	int n;
 	double va;
-	for (t = 0; t < pasos; t++)
+	double total = (double) (pasos + termalizacion);
+	double ax = 0.146624, bx = -0.013726, ap = 1.02777, bp =  0.0117; //parametros del ajuste para calcular los dx y dp
+	dp = sqrt(T0) * ap + bp;
+	dx = sqrt(T0) * ax + bx;
+	double dep_rho = 0.13 / rho;
+	dx = dx * dep_rho;
+//---Termalizacion inicial
+	double si_x, si_p;
+	si_x = 0.0;
+	si_p = 0.0;
+	for (n = 0; n < pasos; n++)
 	{
-		aceptacion_x += metro_x (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dx, beta, type);
-		aceptacion_p += metro_p (x, p, tabla_V_LJ, tabla_V_P, dr2, ds2, rc2, sc2, L, N, q0, p0, E, dp, beta, type);
-		if(t % correlacion == 0)
+		si_x += metro_x (x, p, E, tabla_V_LJ, tabla_V_P, rc2, sc2, dr2, ds2, q0, p0, L, beta, dx, N);
+		si_p += metro_p (x, p, E, tabla_V_LJ, tabla_V_P, sc2, ds2, q0, p0, L, beta, dp, N);
+
+		if(n % correlacion == 0)
 		{
-			*(Energia + t / correlacion) = *E;
+			*(Energia + n / correlacion) = *E;
 		}
-		va = (double) t * 100.0 / (double) pasos;
+		va = (double) (n + termalizacion) * 100.0 / total;
 		printf("Progreso %.2lf", va);
 		printf("%%\r");
 	}
-	printf("\n Aceptación en x---> %lf", aceptacion_x / (double) pasos * 100.0);
-	printf("%%\n");
-	printf("\n Aceptación en p---> %lf", aceptacion_p / (double) pasos * 100.0);
-	printf("%%\n");
-	printf("\n Aceptación---> %lf", (aceptacion_x + aceptacion_p) / (2.0 * (double) pasos) * 100.0);
-	printf("%%\n");
-	printf("\n Energía final %lf\n", *E);
-//-------
+	si_x = si_x / (double) pasos * 100.0;
+	si_p = si_p / (double) pasos * 100.0;
+	printf("\n aceptación en x---->%.2lf\n", si_x);
+	printf("\n aceptación en p---->%.2lf\n", si_p);
 	FILE * fp;
 	char filename[500];
-	sprintf (filename,"/home/pedro/Desktop/Final_compu/Datos/prueba2.txt");
+	sprintf (filename,"/home/pedro/Desktop/Metropolis_Pauli/Datos/corrida_T_%.2lf_rho_%.2lf.txt", T0, rho);
 	fp = fopen(filename, "w");
 
-	for (t = 0; t < pasos / correlacion; t++)
-	{
-		fprintf(fp, "%d\t", t);
-		fprintf (fp, "%lf\n",  *(Energia + t));
+	for (n = 0; n < pasos; n++)
+	{		
+		fprintf(fp, "%d\t", n);
+		fprintf (fp, "%lf\n",  *(Energia + n) / (double) N);
+		va = (double) (total - pasos + n) * 100.0 / total;
+		printf("Progreso %.2lf", va);
+		printf("%%\r");
+
 	}
 	fclose(fp);
 
 	free(x);
 	free(p);
-	free(type);
 	free(tabla_V_LJ);
 	free(tabla_V_P);
 	free(E);
 	free(Energia);
-	return 0;
-}
-int ID_random(double *type, int N)
-{
-	double al, bl;
-	int i;
-	for(i = 0; i < N; i++)
-	{
-		al = rand()%2 + 1.0; //tira 2s y 1s
-		bl = rand()%2 * 2.0 - 1.0; //tira -1s y 1s
-		*(type + i) = bl * al;
-	}
-	return 0;
-}
-
-int ID_half(double *type, int N) //1/2 n & p, y 1/2 up & down
-{
-	int i;
-	for(i = 0; i < N; i = i + 2)
-	{
-		*(type + i) = 2.0;
-	}
-	for(i = 1; i < N; i = i + 2)
-	{
-		*(type + i) = 1.0;
-	}
-	for(i = 0; i < N; i = i + 4)
-	{
-		*(type + i) = -*(type + i);
-	}
-	for(i = 1; i < N; i = i + 4)
-	{
-		*(type + i) = -*(type + i);
-	}
-	return 0;
-}
-
-int imprimir_ID(double *type, int N)
-{
-	int p_u = 0, p_d = 0, n_u = 0, n_d = 0, i;
-	for(i = 0; i < N; i++)
-	{
-		if(*(type + i) == -1.0)
-		{
-			n_d += 1;
-		}
-		else if(*(type + i) == -2.0)
-		{
-			p_d += 1;
-		}
-
-		else if(*(type + i) == 1.0)
-		{
-			n_u += 1;
-		}
-		p_u = N - p_d - n_u - n_d;
-	}
-	printf("\n--------------\n");
-	printf("protón:  up %d", p_u);
-	printf("   +   ");
-	printf("down %d", p_d);
-	printf("-----> %d\n", p_d + p_u);
-	printf("neutrón: up %d", n_u);
-	printf("   +   ");
-	printf("down %d", n_d);
-	printf("-----> %d\n", n_d + n_u);
-	printf("--------------\n");
 	return 0;
 }
 #include "general.c"
