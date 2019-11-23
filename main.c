@@ -20,8 +20,8 @@ int main(int argc,char *argv[])
 	double L = cbrt(N / rho);
 	double T0 = 4.05, beta = 1.0 / T0;
 	double dx, dp; //diferenciales p/ Montecarlo
-	int correlacion = 1, pasos = 2 * N * correlacion, pre_termalizacion = 50, termalizacion = N * 1;
-//	int correlacion = 3 * N, pasos = 6000 * N, pre_termalizacion = 40000000, termalizacion = N * 1000;
+//	int correlacion = 1, pasos = 2 * N * correlacion, pre_termalizacion = 50, termalizacion = N * 1;
+	int correlacion = 3 * N, pasos = 6000 * N, pre_termalizacion = 40000000, termalizacion = N * 1000;
 	int l, laps = 20, vmd_range = 1000 * N, vmd = 0;
 	char filename2[255];
 	sprintf (filename2,"%d_rho_%.2lf.lammpstrj", N, rho);
