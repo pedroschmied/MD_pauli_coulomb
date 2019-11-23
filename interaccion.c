@@ -36,7 +36,7 @@ int pos_PBC(double *x, int i, double L)
 	return 0;
 }
 
-double hamiltoneano (double *x, double *p, double *tabla_V_LJ, double *tabla_V_P, double dr2, double ds2, double rc2, double sc2, double L, int N, double q0, double p0)
+double hamiltoneano (double *x, double *p, double *tabla_V_LJ, double *tabla_V_P, double dr2, double ds2, double rc2, double sc2, double L, int N, double q0, double p0, double m)
 {
 	int i, j;
 	double *delta_r;
@@ -47,8 +47,9 @@ double hamiltoneano (double *x, double *p, double *tabla_V_LJ, double *tabla_V_P
 	double V_LJ = 0.0, V_P = 0.0, E_cin = 0.0;
 	for (i = 0; i < 3 * N; i++)
 	{
-		E_cin += *(p + i) * *(p + i) / 2.0;
+		E_cin += *(p + i) * *(p + i);
 	}
+	E_cin = E_cin / (2.0 * m);
 	for (i = 0; i < N - 1; i++)
 	{
 		for (j = i + 1; j < N; j++)
@@ -167,7 +168,7 @@ double  variacion_E_x (double *x, double *x_new, double *p, double *tabla_V_LJ, 
 	return dE;
 }
 
-double  variacion_E_p (double *x, double *p, double *p_new, double *tabla_V_P, double sc2, double ds2, double q0, double p0, double L, int N, int target)
+double  variacion_E_p (double *x, double *p, double *p_new, double *tabla_V_P, double sc2, double ds2, double q0, double p0, double L, int N, int target, double m)
 {
 	int j;
 	double *delta_r;
@@ -212,7 +213,7 @@ double  variacion_E_p (double *x, double *p, double *p_new, double *tabla_V_P, d
 	{
 		dE_cin += *(p_new + j) * *(p_new + j) - *(p + j) * *(p + j);
 	}
-
+	dE_cin = dE_cin / (2.0 * m);
 	double dE = H_new - H + dE_cin;
 	free(delta_r);
 	return dE;
